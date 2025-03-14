@@ -11,6 +11,137 @@ A expense sharing application built with NestJS that helps groups track and spli
 - Real-time balance calculations
 - Redis caching for improved performance
 
+## Core Functionalities
+
+### Expense Management
+
+The application provides a robust expense management system with the following features:
+
+1. **Adding Expenses**
+
+   - Users can add expenses to any group they belong to
+   - Each expense requires:
+     - Description
+     - Total amount
+     - Who paid (paidById)
+     - Split type (EQUAL, EXACT, or PERCENTAGE)
+     - List of splits among group members
+
+2. **Split Types**
+
+   - **EQUAL Split**: Amount is divided equally among all participants
+   - **EXACT Split**: Each participant pays a specific amount (sum must equal total)
+   - **PERCENTAGE Split**: Each participant pays a percentage of the total (must sum to 100%)
+
+3. **Validation Rules**
+   - All participants must be members of the group
+   - The same user cannot appear multiple times in splits
+   - The payer must be a group member
+   - For EXACT splits, the sum of split amounts must equal the total expense
+   - For PERCENTAGE splits, percentages must sum to 100%
+
+### Settlement System
+
+The settlement system helps users resolve their debts efficiently:
+
+1. **Balance Calculation**
+
+   - The system maintains real-time balances for each user in a group
+   - Balances are calculated by:
+     - Adding the full amount to the payer's balance (positive = is owed money)
+     - Subtracting split amounts from each participant's balance
+     - Processing any settlements made between users
+
+2. **Settlement Rules**
+
+   - Users can only settle debts when:
+     - The paying user (fromUser) has a negative balance (owes money)
+     - The receiving user (toUser) has a positive balance (is owed money)
+     - The settlement amount doesn't exceed the minimum of:
+       - The absolute value of the paying user's negative balance
+       - The receiving user's positive balance
+
+3. **Detailed Balance Tracking**
+   - For each user in a group, the system tracks:
+     - Who they owe money to (owes)
+     - Who owes them money (isOwed)
+     - Their net balance in the group
+   - All balances are cached for performance (1-minute TTL)
+
+### Example: Adding an Expense
+
+1. **Equal Split Example**:
+
+```json
+{
+  "description": "Dinner",
+  "amount": 100.0,
+  "type": "EQUAL",
+  "paidById": "user1-id",
+  "groupId": "group1-id",
+  "splits": [
+    { "userId": "user1-id" },
+    { "userId": "user2-id" },
+    { "userId": "user3-id" }
+  ]
+}
+```
+
+Each user will owe $33.33 (except the payer who paid $100)
+
+2. **Exact Split Example**:
+
+```json
+{
+  "description": "Groceries",
+  "amount": 100.0,
+  "type": "EXACT",
+  "paidById": "user1-id",
+  "groupId": "group1-id",
+  "splits": [
+    { "userId": "user1-id", "amount": 20.0 },
+    { "userId": "user2-id", "amount": 45.0 },
+    { "userId": "user3-id", "amount": 35.0 }
+  ]
+}
+```
+
+3. **Percentage Split Example**:
+
+```json
+{
+  "description": "House Rent",
+  "amount": 1000.0,
+  "type": "PERCENTAGE",
+  "paidById": "user1-id",
+  "groupId": "group1-id",
+  "splits": [
+    { "userId": "user1-id", "percentage": 40 },
+    { "userId": "user2-id", "percentage": 35 },
+    { "userId": "user3-id", "percentage": 25 }
+  ]
+}
+```
+
+### Example: Creating a Settlement
+
+```json
+{
+  "amount": 50.0,
+  "notes": "Settling dinner payment",
+  "fromUserId": "user2-id",
+  "toUserId": "user1-id",
+  "groupId": "group1-id"
+}
+```
+
+This will:
+
+1. Increase user2's balance by $50 (they paid their debt)
+2. Decrease user1's balance by $50 (they received the payment)
+3. Update the detailed balance sheet automatically
+4. Invalidate the group's balance cache for real-time accuracy
+
 ## Getting Started
 
 ### Prerequisites
@@ -155,4 +286,3 @@ Key environment variables (all configured in docker-compose files):
 - **Redis** - Caching layer
 - **TypeORM** - ORM for database operations
 - **Swagger** - API documentation
-
